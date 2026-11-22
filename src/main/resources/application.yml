@@ -1,0 +1,87 @@
+# ---------------------------------------------------------------------------
+# Batch Inspector - read-only Spring Batch 5.x dashboard
+# All secrets come from environment variables. Databases whose URL is blank are ignored,
+# so you only need to set variables for the databases you actually use.
+# ---------------------------------------------------------------------------
+server:
+  port: ${SERVER_PORT:8080}
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-exception: false
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+
+spring:
+  application:
+    name: batch-inspector
+  main:
+    banner-mode: "off"
+  # Never start jobs, never create/migrate metadata tables (Spring Batch is not even on the classpath).
+  batch:
+    job:
+      enabled: false
+    jdbc:
+      initialize-schema: never
+  thymeleaf:
+    cache: ${THYMELEAF_CACHE:true}
+  jackson:
+    default-property-inclusion: always
+
+logging:
+  level:
+    root: INFO
+    com.ithaka.batchinspector: INFO
+    # Hikari logs pool names/states only (never credentials); keep it at INFO.
+    com.zaxxer.hikari: INFO
+
+dashboard:
+  # Spring Batch tables are <prefix>JOB_EXECUTION, <prefix>STEP_EXECUTION, ... (default prefix is BATCH_).
+  table-prefix: ${BATCH_TABLE_PREFIX:CMJL_}
+  # Time zone of the JVM that RUNS your batch jobs (Spring Batch 5 stores local date-times). Example: Asia/Kolkata, America/New_York
+  display-zone: ${DASHBOARD_ZONE:}
+  default-max-results: 50
+  max-results-limit: 500
+  max-context-chars: 20000
+  query-timeout-seconds: 30
+  sensitive-parameter-patterns: password,passwd,pwd,secret,token,apikey,api_key,api-key,credential,private,authorization
+  default-database: ${DEFAULT_DB:}
+
+  databases:
+    - id: dev
+      name: Development
+      environment: DEV
+      url: jdbc:mysql://localhost:3306/startrek
+      username: root
+      password:
+      schema: startrek
+      table-prefix:
+      pool:
+        max-pool-size: ${DB1_POOL_MAX:4}
+        min-idle: 0
+        connection-timeout-ms: 10000
+        idle-timeout-ms: 60000
+        max-lifetime-ms: 600000
+        validation-timeout-ms: 5000
+    - id: qa
+      name: ${DB2_NAME:QA}
+      environment: ${DB2_ENV:QA}
+      url: ${DB2_URL:}
+      username: ${DB2_USER:}
+      password: ${DB2_PASSWORD:}
+      schema: ${DB2_SCHEMA:}
+      table-prefix: ${DB2_TABLE_PREFIX:}
+      pool:
+        max-pool-size: ${DB2_POOL_MAX:4}
+    - id: prod
+      name: ${DB3_NAME:Production}
+      environment: ${DB3_ENV:PROD}
+      url: ${DB3_URL:}
+      username: ${DB3_USER:}
+      password: ${DB3_PASSWORD:}
+      schema: ${DB3_SCHEMA:}
+      table-prefix: ${DB3_TABLE_PREFIX:}
+      pool:
+        max-pool-size: ${DB3_POOL_MAX:4}

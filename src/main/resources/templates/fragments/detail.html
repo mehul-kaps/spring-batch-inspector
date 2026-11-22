@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<!-- =================================================================== error -->
+<div th:fragment="error" class="alert error" role="alert">
+    <b>Couldn't load this view.</b>
+    <p th:text="${error}">error</p>
+    <p class="hint">The execution list and filters are unaffected.</p>
+</div>
+
+<!-- =================================================================== detail -->
+<section th:fragment="detail" class="d" th:attr="data-exec-id=${d.summary().id()},data-db=${db}"
+         th:with="s=${d.summary()}, st=${@fmt.statusCss(d.summary().status())}, el=${@fmt.elapsedMs(d.summary().startTime(), d.summary().endTime(), d.summary().status())}">
+
+    <header class="d-ribbon" th:classappend="${'s-' + st}">
+        <div class="avatar big" th:style="${'--h:' + @fmt.hue(s.jobName())}" th:text="${@fmt.initials(s.jobName())}" aria-hidden="true">IJ</div>
+        <div class="d-title">
+            <h2 class="mono" th:text="${s.jobName()}">ingestJob</h2>
+            <div class="d-sub mono">
+                <span>exec <b th:text="${s.id()}">1</b></span>
+                <button type="button" class="copy" th:attr="data-copy=${s.id()}" title="Copy execution id">⧉</button>
+                <span>· instance <b th:text="${s.instanceId()}">1</b></span>
+                <button type="button" class="copy" th:attr="data-copy=${s.instanceId()}" title="Copy instance id">⧉</button>
+            </div>
+        </div>
+        <span class="badge big" th:classappend="${'s-' + st}">
+            <i th:text="${@fmt.statusGlyph(s.status())}">✓</i><span th:text="${@fmt.statusLabel(s.status())}">Completed</span>
+        </span>
+        <div class="d-actions">
+            <button type="button" class="btn ghost small" data-action="reload-detail" title="Re-read this execution from the database">↻</button>
+            <button type="button" class="btn ghost small" data-action="close-detail" title="Close (Esc)">✕</button>
+        </div>
+    </header>
+
+    <nav class="tabs" role="tablist" aria-label="Execution details">
+        <button type="button" role="tab" class="tab active" data-tab="overview" aria-selected="true"><u>1</u> Overview</button>
+        <button type="button" role="tab" class="tab" data-tab="steps" aria-selected="false"><u>2</u> Steps <span class="count" th:text="${d.steps().size()}">3</span><span class="count bad" th:if="${s.failedStepCount() > 0}" th:text="${s.failedStepCount()}">1</span></button>
+        <button type="button" role="tab" class="tab" data-tab="params" aria-selected="false"><u>3</u> Parameters <span class="count" th:text="${d.parameters().size()}">0</span></button>
+        <button type="button" role="tab" class="tab" data-tab="context" aria-selected="false"><u>4</u> Context</button>
+    </nav>
+
+    <!-- ----------------------------------------------------------- overview -->
+    <div class="tabpanel" id="panel-overview" role="tabpanel" data-panel="overview">
+
+        <div class="kpis">
+            <div class="kpi"><span class="k">Duration</span>
+                <b class="v mono live-elapsed" th:if="${@fmt.live(s.startTime(), s.endTime(), s.status())}" th:attr="data-start=${@fmt.epoch(s.startTime())}" th:text="${@fmt.duration(el)}">1m</b>
+                <b class="v mono" th:unless="${@fmt.live(s.startTime(), s.endTime(), s.status())}" th:text="${@fmt.duration(el)}">1m</b>
+            </div>
+            <div class="kpi"><span class="k">Started</span><b class="v mono sm" th:text="${@fmt.ts(s.startTime())}">—</b></div>
+            <div class="kpi"><span class="k">Ended</span><b class="v mono sm" th:text="${s.endTime() == null ? (@fmt.live(s.startTime(), s.endTime(), s.status()) ? 'still running' : '—') : @fmt.ts(s.endTime())}">—</b></div>
+            <div class="kpi"><span class="k">Steps</span><b class="v mono"><span th:text="${s.stepCount()}">3</span><small class="bad" th:if="${s.failedStepCount() > 0}" th:text="${' · ' + s.failedStepCount() + ' failed'}"></small></b></div>
+            <div class="kpi"><span class="k">Exit code</span><b class="v mono sm" th:text="${s.exitCode() == null ? '—' : s.exitCode()}">COMPLETED</b></div>
+        </div>
+
+        <!-- failure spotlight -->
+        <div class="spot" th:each="st2 : ${d.steps()}" th:if="${@fmt.statusCss(st2.status()) == 'failed'}">
+            <div class="spot-h"><span class="badge s-failed"><i>✕</i><span>Step failed</span></span>
+                <b class="mono" th:text="${st2.name()}">step</b>
+                <span class="muted mono" th:text="${'#' + st2.id()}"></span></div>
+            <pre class="exit" th:if="${@fmt.notBlank(st2.exitMessage())}" th:text="${st2.exitMessage()}">stack</pre>
+            <p class="muted" th:unless="${@fmt.notBlank(st2.exitMessage())}">No exit message was stored for this step.</p>
+        </div>
+        <div class="spot" th:if="${@fmt.notBlank(s.exitMessage()) and (@fmt.statusCss(s.status()) == 'failed' or s.exitCode() != 'COMPLETED')}">
+            <div class="spot-h"><span class="badge" th:classappend="${'s-' + st}"><i>!</i><span>Job exit message</span></span></div>
+            <pre class="exit" th:text="${s.exitMessage()}">msg</pre>
+        </div>
+
+        <!-- visual timeline (primary debugging view) -->
+        <div class="card">
+            <div class="card-h"><h3>Step timeline</h3><span class="muted">actual persisted timestamps · <span th:text="${d.timeline().zoneLabel()}"></span></span></div>
+            <div class="tl-host" id="timeline"></div>
+            <script type="application/json" id="timelineData" th:utext="${timelineJson}">{}</script>
+        </div>
+
+        <!-- summary grid -->
+        <div class="card">
+            <div class="card-h"><h3>Job execution</h3></div>
+            <dl class="grid">
+                <div><dt>Job name</dt><dd class="mono" th:text="${s.jobName()}">job</dd></div>
+                <div><dt>Execution ID</dt><dd class="mono" th:text="${s.id()}">1</dd></div>
+                <div><dt>Instance ID</dt><dd class="mono" th:text="${s.instanceId()}">1</dd></div>
+                <div><dt>Status</dt><dd><span class="badge" th:classappend="${'s-' + st}"><i th:text="${@fmt.statusGlyph(s.status())}"></i><span th:text="${@fmt.statusLabel(s.status())}"></span></span></dd></div>
+                <div><dt>Start time</dt><dd class="mono" th:text="${@fmt.ts(s.startTime())}">—</dd></div>
+                <div><dt>End time</dt><dd class="mono" th:text="${@fmt.ts(s.endTime())}">—</dd></div>
+                <div><dt>Create time</dt><dd class="mono" th:text="${@fmt.ts(s.createTime())}">—</dd></div>
+                <div><dt>Last updated</dt><dd class="mono" th:text="${@fmt.ts(s.lastUpdated())}">—</dd></div>
+                <div><dt>Exit code</dt><dd class="mono" th:text="${s.exitCode() == null ? '—' : s.exitCode()}">—</dd></div>
+                <div><dt>Version</dt><dd class="mono" th:text="${s.version() == null ? '—' : s.version()}">—</dd></div>
+                <div class="wide"><dt>Job key (identifying-parameter hash)</dt><dd class="mono sm" th:text="${d.jobKey() == null ? '—' : d.jobKey()}">—</dd></div>
+            </dl>
+            <p class="hint" th:if="${s.endTime() == null and @fmt.live(s.startTime(), s.endTime(), s.status())}">
+                Persisted as <b th:text="${@fmt.statusLabel(s.status())}"></b> with no end time. If the JVM is gone this is a stale/zombie execution — compare “Last updated” with the clock.</p>
+        </div>
+    </div>
+
+    <!-- ----------------------------------------------------------- steps -->
+    <div class="tabpanel" id="panel-steps" role="tabpanel" data-panel="steps" hidden>
+        <p class="empty" th:if="${d.steps().isEmpty()}">This execution has no step executions.</p>
+        <div class="table-wrap" th:unless="${d.steps().isEmpty()}">
+            <table class="steps">
+                <thead><tr>
+                    <th>Status</th><th>Step</th><th>Started</th><th>Ended</th><th>Duration</th>
+                    <th class="n">Read</th><th class="n">Write</th><th class="n">Filter</th>
+                    <th class="n" title="read / write / process skips">Skips r·w·p</th>
+                    <th class="n" title="commits / rollbacks">Commit·Rollback</th><th class="n">Throughput</th><th>Exit</th>
+                </tr></thead>
+                <tbody th:each="x : ${d.steps()}" th:with="sel=${@fmt.elapsedMs(x.startTime(), x.endTime(), x.status())}">
+                    <tr class="step-row" th:classappend="${'s-' + @fmt.statusCss(x.status())}" th:attr="data-step-id=${x.id()}">
+                        <td><span class="badge" th:classappend="${'s-' + @fmt.statusCss(x.status())}"><i th:text="${@fmt.statusGlyph(x.status())}"></i><span th:text="${@fmt.statusLabel(x.status())}"></span></span></td>
+                        <td><b class="mono" th:text="${x.name()}">step</b><div class="muted mono sm" th:text="${'#' + x.id()}"></div></td>
+                        <td class="mono sm" th:title="${@fmt.ts(x.startTime())}" th:text="${@fmt.tsShort(x.startTime())}">—</td>
+                        <td class="mono sm" th:title="${@fmt.ts(x.endTime())}" th:text="${@fmt.tsShort(x.endTime())}">—</td>
+                        <td class="durcell">
+                            <span class="mono live-elapsed" th:if="${@fmt.live(x.startTime(), x.endTime(), x.status())}" th:attr="data-start=${@fmt.epoch(x.startTime())}" th:text="${@fmt.duration(sel)}">1m</span>
+                            <span class="mono" th:unless="${@fmt.live(x.startTime(), x.endTime(), x.status())}" th:text="${@fmt.duration(sel)}">1m</span>
+                            <span class="durbar"><i th:style="${'width:' + @fmt.pct(sel, d.slowestStepMs()) + '%'}"></i></span>
+                            <span class="flag" th:if="${sel != null and d.slowestStepMs() > 0 and sel.longValue() == d.slowestStepMs() and d.steps().size() > 1}" title="Slowest step of this execution">slowest</span>
+                        </td>
+                        <td class="n mono" th:text="${@fmt.num(x.readCount())}">0</td>
+                        <td class="n mono" th:text="${@fmt.num(x.writeCount())}">0</td>
+                        <td class="n mono" th:text="${@fmt.num(x.filterCount())}">0</td>
+                        <td class="n mono" th:classappend="${(x.readSkipCount() ?: 0) + (x.writeSkipCount() ?: 0) + (x.processSkipCount() ?: 0) > 0 ? 'warn' : ''}"
+                            th:text="${@fmt.num(x.readSkipCount()) + ' · ' + @fmt.num(x.writeSkipCount()) + ' · ' + @fmt.num(x.processSkipCount())}">0·0·0</td>
+                        <td class="n mono" th:classappend="${(x.rollbackCount() ?: 0) > 0 ? 'warn' : ''}"
+                            th:text="${@fmt.num(x.commitCount()) + ' · ' + @fmt.num(x.rollbackCount())}">0·0</td>
+                        <td class="n mono sm" th:text="${@fmt.rate(x.writeCount(), sel)}">—</td>
+                        <td class="mono sm" th:text="${x.exitCode() == null ? '—' : x.exitCode()}">—</td>
+                    </tr>
+                    <tr class="step-more" th:classappend="${@fmt.statusCss(x.status()) == 'failed' ? 'open' : ''}">
+                        <td colspan="12">
+                            <div class="more-grid mono sm">
+                                <span>Created <b th:text="${@fmt.ts(x.createTime())}">—</b></span>
+                                <span>Last updated <b th:text="${@fmt.ts(x.lastUpdated())}">—</b></span>
+                                <span>Version <b th:text="${x.version() == null ? '—' : x.version()}">—</b></span>
+                            </div>
+                            <pre class="exit" th:if="${@fmt.notBlank(x.exitMessage())}" th:text="${x.exitMessage()}">msg</pre>
+                            <p class="muted sm" th:unless="${@fmt.notBlank(x.exitMessage())}">No exit message stored.</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ----------------------------------------------------------- parameters -->
+    <div class="tabpanel" id="panel-params" role="tabpanel" data-panel="params" hidden>
+        <p class="empty" th:if="${d.parameters().isEmpty()}">No job parameters were recorded for this execution.</p>
+        <div class="table-wrap" th:unless="${d.parameters().isEmpty()}">
+            <table class="params">
+                <thead><tr><th>Name</th><th>Value</th><th>Type</th><th>Identifying</th></tr></thead>
+                <tbody>
+                <tr th:each="p : ${d.parameters()}">
+                    <td class="mono" th:text="${p.name()}">name</td>
+                    <td class="mono val">
+                        <span th:text="${p.value() == null ? '∅ (null)' : p.value()}">value</span>
+                        <span class="tag mini-tag" th:if="${p.masked()}" title="Matches the sensitive-parameter policy">masked</span>
+                        <button type="button" class="copy" th:unless="${p.masked()}" th:attr="data-copy=${p.value()}" title="Copy value">⧉</button>
+                    </td>
+                    <td class="mono sm" th:text="${p.type() == null ? '—' : p.type()}">java.lang.String</td>
+                    <td><span class="tag mini-tag" th:classappend="${p.identifying() ? 'yes' : ''}" th:text="${p.identifying() ? 'identifying' : 'non-identifying'}">identifying</span></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ----------------------------------------------------------- context -->
+    <div class="tabpanel" id="panel-context" role="tabpanel" data-panel="context" hidden>
+        <div class="card">
+            <p>Execution contexts can be large and may hold sensitive values. They are loaded only on request, shown as
+                <b>text only</b> (never deserialised), limited to the first <span th:text="${@fmt.num(maxChars)}">20,000</span> characters per context, and values under
+                keys that look sensitive are masked.</p>
+            <button type="button" class="btn" data-action="load-context">Load execution context (diagnostic)</button>
+            <div id="contextTarget"></div>
+        </div>
+    </div>
+</section>
+
+<!-- =================================================================== context -->
+<div th:fragment="context">
+    <div class="ctx-block" th:each="b : ${blocks}">
+        <details th:open="${!b.empty() and b.scope() == 'job'}">
+            <summary>
+                <b class="mono" th:text="${b.title()}">Job execution context</b>
+                <span class="tag mini-tag" th:if="${b.masked()}">values masked</span>
+                <span class="tag mini-tag warn" th:if="${b.truncated()}">truncated</span>
+                <span class="muted" th:if="${b.empty()}">empty / none stored</span>
+            </summary>
+            <pre class="ctx mono" th:unless="${b.empty()}" th:text="${b.text()}">{}</pre>
+        </details>
+    </div>
+    <p class="muted" th:if="${#lists.isEmpty(blocks)}">No contexts stored.</p>
+</div>
+
+</body>
+</html>

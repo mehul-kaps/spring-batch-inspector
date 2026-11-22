@@ -1,0 +1,19 @@
+-- =====================================================================
+-- DOCUMENTATION ONLY - Batch Inspector never creates or changes anything.
+-- Ask your DBA to evaluate these if the dashboard is slow on very large metadata tables.
+-- Spring Batch already indexes: JOB_EXECUTION(JOB_INSTANCE_ID), STEP_EXECUTION(JOB_EXECUTION_ID) (via FKs/PKs in most DDLs).
+-- Adapt index naming/qualification syntax to your database before applying these examples.
+-- =====================================================================
+
+-- Time-range searches filter/sort on COALESCE(START_TIME, CREATE_TIME) and order by START_TIME desc:
+-- Replace BATCH_ below with the prefix configured in src/main/resources/application.yml.
+--   MySQL:  CREATE INDEX BATCH_JOB_EXEC_START_IX ON BATCH_JOB_EXECUTION (START_TIME DESC);
+--   Oracle: CREATE INDEX BATCH_OWNER.BATCH_JOB_EXEC_START_IX ON BATCH_OWNER.BATCH_JOB_EXECUTION (START_TIME DESC);
+-- Status counts (GROUP BY STATUS within a time window) benefit from:
+--   MySQL:  CREATE INDEX BATCH_JOB_EXEC_START_STATUS_IX ON BATCH_JOB_EXECUTION (START_TIME, STATUS);
+--   Oracle: CREATE INDEX BATCH_OWNER.BATCH_JOB_EXEC_START_STATUS_IX ON BATCH_OWNER.BATCH_JOB_EXECUTION (START_TIME, STATUS);
+-- Step counts per execution (failed-step badge) use the FK index on STEP_EXECUTION(JOB_EXECUTION_ID). Verify it exists:
+--   MySQL:  SHOW INDEX FROM BATCH_STEP_EXECUTION;
+--   Oracle: SELECT index_name, column_name FROM all_ind_columns WHERE table_name = 'BATCH_STEP_EXECUTION';
+-- Job name search is "contains" (UPPER(JOB_NAME) LIKE '%X%'), which cannot use a normal B-tree index. JOB_INSTANCE is small
+-- (one row per distinct job+parameters), so this is rarely a problem. Consider database-specific full-text search only if needed.

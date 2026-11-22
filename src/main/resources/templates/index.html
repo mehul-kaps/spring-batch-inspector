@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Batch Inspector · read-only Spring Batch debugger</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234f46e5'/%3E%3Crect x='6' y='9' width='11' height='4' rx='2' fill='%23fff'/%3E%3Crect x='11' y='15' width='14' height='4' rx='2' fill='%2322c55e'/%3E%3Crect x='8' y='21' width='9' height='4' rx='2' fill='%23ef4444'/%3E%3C/svg%3E">
+    <script>
+        // apply saved theme before first paint (no flash)
+        try { var t = localStorage.getItem('bi.theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+    </script>
+    <link rel="stylesheet" th:href="@{/css/app.css}">
+</head>
+<body th:attr="data-env=${current != null ? #strings.toLowerCase(current.environment()) : ''},data-db=${f.db()},data-searched=${searched},data-server-now=${@fmt.nowEpoch()},data-zone=${@fmt.zoneId()},data-selected=${f.selected()}">
+
+<a class="skip" href="#main">Skip to results</a>
+
+<header class="topbar">
+    <div class="brand">
+        <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--accent)"/><rect x="6" y="9" width="11" height="4" rx="2" fill="#fff"/><rect x="11" y="15" width="14" height="4" rx="2" fill="#22c55e"/><rect x="8" y="21" width="9" height="4" rx="2" fill="#ef4444"/></svg>
+        <span class="brand-name">Batch Inspector</span>
+        <span class="tag" title="This tool can only run SELECT statements">READ-ONLY</span>
+    </div>
+    <div class="db-pill" th:if="${current != null}" title="Currently selected database">
+        <span class="env" th:if="${!#strings.isEmpty(current.environment())}" th:text="${current.environment()}">DEV</span>
+        <span class="db-label">DB</span><b th:text="${current.name()}">Development</b>
+    </div>
+    <div class="spacer"></div>
+    <span class="zone muted" title="All timestamps are shown in this zone"><span th:text="${@fmt.zoneLabel()}">UTC</span></span>
+    <button type="button" class="btn ghost" id="btnRefresh" title="Reload the current results (r)">⟳ Refresh</button>
+    <label class="auto" title="Automatically reload the results">Auto
+        <select id="autoRefresh" aria-label="Auto refresh interval">
+            <option value="0">off</option><option value="15">15 s</option><option value="30">30 s</option><option value="60">60 s</option>
+        </select>
+    </label>
+    <button type="button" class="btn ghost icon" id="btnTheme" title="Toggle light / dark (t)" aria-label="Toggle theme">◐</button>
+    <button type="button" class="btn ghost icon" id="btnHelp" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+</header>
+<div class="env-banner" role="note">PRODUCTION DATABASE · this session is strictly read-only</div>
+<div id="progress" class="progress" hidden><i></i></div>
+
+<div class="layout">
+    <!-- ================= LEFT: filters ================= -->
+    <aside class="sidebar" aria-label="Search and filters">
+        <form id="filterForm" th:action="@{/}" method="get" novalidate>
+            <input type="hidden" name="search" value="true">
+            <input type="hidden" name="status" id="statusInput" th:value="${f.status()}">
+            <input type="hidden" name="selected" id="selectedInput" th:value="${f.selected()}">
+
+            <div class="field">
+                <label for="db">Database</label>
+                <select id="db" name="db" th:disabled="${noDatabases}">
+                    <option th:each="o : ${databases}" th:value="${o.id()}"
+                            th:text="${o.name() + (o.environment().isEmpty() ? '' : '  ·  ' + o.environment())}"
+                            th:selected="${o.id() == f.db()}">Development</option>
+                </select>
+                <div class="inline">
+                    <button type="button" class="link" id="btnTest" th:disabled="${noDatabases}">Test connection</button>
+                    <span id="testResult" class="hint" role="status" aria-live="polite"></span>
+                </div>
+            </div>
+
+            <fieldset class="field">
+                <legend>Time range <small th:text="'by start time'">by start time</small></legend>
+                <div class="chips" role="radiogroup">
+                    <label class="chip" th:each="r : ${ranges}">
+                        <input type="radio" name="range" th:value="${r.code()}" th:checked="${r.code() == f.range()}">
+                        <span th:text="${r.label()}">24 hours</span>
+                    </label>
+                </div>
+                <div class="custom" id="customRange" th:hidden="${f.range() != 'custom'}">
+                    <label>From <input type="datetime-local" name="from" th:value="${f.from()}"></label>
+                    <label>To <input type="datetime-local" name="to" th:value="${f.to()}"></label>
+                </div>
+            </fieldset>
+
+            <div class="field two">
+                <div>
+                    <label for="executionId">Execution ID</label>
+                    <input id="executionId" name="executionId" class="mono" inputmode="numeric" autocomplete="off" placeholder="exact" th:value="${f.executionId()}">
+                </div>
+                <div>
+                    <label for="instanceId">Instance ID</label>
+                    <input id="instanceId" name="instanceId" class="mono" inputmode="numeric" autocomplete="off" placeholder="exact" th:value="${f.instanceId()}">
+                </div>
+            </div>
+            <p class="hint tight">An Execution ID search ignores the time range.</p>
+
+            <div class="field">
+                <label for="jobName">Job name contains</label>
+                <input id="jobName" name="jobName" type="search" class="mono" autocomplete="off" spellcheck="false"
+                       placeholder="ingest  (case-insensitive)" th:value="${f.jobName()}">
+            </div>
+
+            <div class="field">
+                <label for="max">Maximum results <small th:text="'cap ' + ${maxLimit}">cap 500</small></label>
+                <div class="inline">
+                    <input id="max" name="max" type="number" min="1" th:max="${maxLimit}" class="mono narrow" th:value="${f.max()}">
+                    <div class="presets">
+                        <button type="button" class="mini" data-max="25">25</button>
+                        <button type="button" class="mini" data-max="50">50</button>
+                        <button type="button" class="mini" data-max="100">100</button>
+                        <button type="button" class="mini" data-max="250">250</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button type="submit" class="btn primary" th:disabled="${noDatabases}">Search</button>
+                <a class="btn" th:href="@{/}" id="btnReset" title="Restore all filters to their defaults">Reset</a>
+            </div>
+        </form>
+
+        <div class="side-foot">
+            <p><kbd>/</kbd> search job · <kbd>j</kbd><kbd>k</kbd> move · <kbd>↵</kbd> open · <kbd>?</kbd> help</p>
+        </div>
+    </aside>
+
+    <!-- ================= RIGHT: results ================= -->
+    <main class="main" id="main">
+
+        <section class="empty big" th:if="${noDatabases}">
+            <h2>No database configured yet</h2>
+            <p>Set at least one <code>DBn_URL</code>, <code>DBn_USER</code> and <code>DBn_PASSWORD</code> environment variable
+                (see <code>.env.example</code> / <code>application.yml</code>) and restart. The UI itself works without any database.</p>
+        </section>
+
+        <th:block th:unless="${noDatabases}">
+
+            <div class="alert error" role="alert" th:if="${error != null}">
+                <b>Couldn't load executions.</b>
+                <p th:text="${error}">error</p>
+                <p class="hint">Nothing was changed. You can fix the filters, test the connection, or switch to another database in the sidebar.</p>
+            </div>
+            <div class="alert info" th:each="n : ${notes}" th:text="${n}">note</div>
+
+            <section class="empty big" th:if="${!searched}">
+                <div class="hero-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+                <h2>Ready when you are</h2>
+                <p>Pick a database and filters, then run a search. No database connection has been opened yet — pools are created
+                    lazily the first time you ask for data.</p>
+                <button type="submit" form="filterForm" class="btn primary large">Search executions</button>
+            </section>
+
+            <th:block th:if="${searched and result != null}">
+
+                <nav class="statusbar" aria-label="Filter by execution status">
+                    <a th:each="c : ${cards}" class="scard"
+                       th:classappend="${'s-' + c.css() + (c.active() ? ' active' : '') + (c.count() == 0 and c.code() != 'all' ? ' zero' : '')}"
+                       th:attr="aria-current=${c.active() ? 'true' : null}"
+                       th:href="@{/(db=${f.db()},range=${f.range()},from=${f.from()},to=${f.to()},executionId=${f.executionId()},instanceId=${f.instanceId()},jobName=${f.jobName()},max=${f.max()},status=${c.code()},search=true)}"
+                       th:title="${c.label() + ': ' + @fmt.num(c.count()) + ' execution(s) match the sidebar filters'}">
+                        <span class="glyph" aria-hidden="true" th:text="${c.glyph()}">✓</span>
+                        <span class="lbl" th:text="${c.label()}">Completed</span>
+                        <span class="cnt" th:text="${@fmt.num(c.count())}">8</span>
+                        <i class="share" th:style="${'--pct:' + @fmt.pct(c.count(), result.total()) + '%'}"></i>
+                    </a>
+                </nav>
+
+                <div class="meta">
+                    <span>Showing <b th:text="${@fmt.num(result.rows().size())}">50</b> of
+                        <b th:text="${@fmt.num(result.matching())}">123</b> matching execution(s)</span>
+                    <span class="muted" th:if="${f.status() != 'all'}">· status <b th:text="${f.status()}">FAILED</b></span>
+                    <span class="trunc" th:if="${result.truncated()}">Only the newest <b th:text="${result.limit()}">50</b> are listed — raise “Maximum results” or narrow the filters to see the rest.</span>
+                    <span class="muted right">sorted by start time, newest first</span>
+                </div>
+
+                <div class="split">
+                    <section class="list-col" aria-label="Job executions">
+                        <div class="empty" th:if="${result.rows().isEmpty()}">
+                            <h3>No executions match</h3>
+                            <p>Try a wider time range, clear the job name, or pick status “All”.</p>
+                        </div>
+                        <ol class="exec-list" id="execList" role="listbox" aria-label="Job executions" th:unless="${result.rows().isEmpty()}">
+                            <li th:each="e : ${result.rows()}" class="exec" tabindex="0" role="option"
+                                th:classappend="${'s-' + @fmt.statusCss(e.status()) + (f.selected() == ('' + e.id()) ? ' selected' : '')}"
+                                th:attr="data-id=${e.id()},aria-selected=${f.selected() == ('' + e.id())}"
+                                th:with="el=${@fmt.elapsedMs(e.startTime(), e.endTime(), e.status())}">
+                                <i class="stripe"></i>
+                                <div class="avatar" th:style="${'--h:' + @fmt.hue(e.jobName())}" th:text="${@fmt.initials(e.jobName())}" aria-hidden="true">IJ</div>
+                                <div class="body">
+                                    <div class="row1">
+                                        <span class="jobname mono" th:text="${e.jobName()}" th:title="${e.jobName()}">ingestJob</span>
+                                        <span class="badge" th:classappend="${'s-' + @fmt.statusCss(e.status())}">
+                                            <i th:text="${@fmt.statusGlyph(e.status())}">✓</i><span th:text="${@fmt.statusLabel(e.status())}">Completed</span>
+                                        </span>
+                                    </div>
+                                    <div class="row2 mono">
+                                        <span title="Job execution id">#<span th:text="${e.id()}">1</span></span>
+                                        <span title="Job instance id">inst&nbsp;<span th:text="${e.instanceId()}">1</span></span>
+                                        <span th:title="${'Started ' + @fmt.ts(e.startTime())}" th:text="${@fmt.tsShort(e.startTime())}">start</span>
+                                        <span>→</span>
+                                        <span th:title="${'Ended ' + @fmt.ts(e.endTime())}" th:text="${e.endTime() == null ? (@fmt.live(e.startTime(), e.endTime(), e.status()) ? 'running' : '—') : @fmt.tsShort(e.endTime())}">end</span>
+                                        <b class="dur live-elapsed" th:if="${@fmt.live(e.startTime(), e.endTime(), e.status())}" th:attr="data-start=${@fmt.epoch(e.startTime())}" th:text="${@fmt.duration(el)}">1m</b>
+                                        <b class="dur" th:unless="${@fmt.live(e.startTime(), e.endTime(), e.status())}" th:text="${@fmt.duration(el)}">1m</b>
+                                    </div>
+                                    <div class="row3">
+                                        <span class="exitcode mono" th:text="${e.exitCode() == null ? '—' : e.exitCode()}">COMPLETED</span>
+                                        <span class="exitmsg" th:if="${@fmt.notBlank(e.exitMessage())}" th:text="${@fmt.oneLine(e.exitMessage(), 140)}" th:title="${@fmt.oneLine(e.exitMessage(), 400)}">msg</span>
+                                    </div>
+                                    <div class="row4">
+                                        <span class="chip-s" th:text="${e.stepCount() + (e.stepCount() == 1 ? ' step' : ' steps')}">3 steps</span>
+                                        <span class="chip-s bad" th:if="${e.failedStepCount() > 0}" th:text="${e.failedStepCount() + ' failed'}">1 failed</span>
+                                        <span class="chip-s" th:if="${e.lastUpdated() != null}" th:title="${'Last updated ' + @fmt.ts(e.lastUpdated())}" th:text="${'upd ' + @fmt.tsShort(e.lastUpdated())}">upd</span>
+                                        <span class="durbar" th:title="'Duration relative to the longest listed execution'"><i th:style="${'width:' + @fmt.pct(el, result.maxDurationMs()) + '%'}"></i></span>
+                                    </div>
+                                </div>
+                            </li>
+                        </ol>
+                    </section>
+
+                    <section class="detail" id="detailPane" aria-live="polite" aria-label="Execution details">
+                        <div class="placeholder">
+                            <div class="hero-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+                            <h3>Select an execution</h3>
+                            <p>Click a row (or use <kbd>j</kbd>/<kbd>k</kbd> and <kbd>↵</kbd>) to see its steps, timeline, parameters and exit messages.</p>
+                        </div>
+                    </section>
+                </div>
+            </th:block>
+        </th:block>
+    </main>
+</div>
+
+<dialog id="helpDlg" aria-labelledby="helpTitle">
+    <h3 id="helpTitle">Keyboard shortcuts</h3>
+    <table class="keys">
+        <tr><td><kbd>/</kbd></td><td>Focus “Job name contains”</td></tr>
+        <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>Next / previous execution</td></tr>
+        <tr><td><kbd>↵</kbd></td><td>Open the focused execution</td></tr>
+        <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>Detail tabs: Overview · Steps · Parameters · Context</td></tr>
+        <tr><td><kbd>r</kbd></td><td>Refresh results</td></tr>
+        <tr><td><kbd>t</kbd></td><td>Toggle light / dark</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Close details / this dialog</td></tr>
+    </table>
+    <form method="dialog"><button class="btn primary">Close</button></form>
+</dialog>
+
+<script th:src="@{/js/timeline.js}"></script>
+<script th:src="@{/js/app.js}"></script>
+</body>
+</html>
