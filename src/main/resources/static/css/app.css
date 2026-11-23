@@ -6,7 +6,7 @@
   --font-ui: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", "SF Mono", ui-monospace, Menlo, Consolas, "Liberation Mono", monospace;
   --hdr: 52px;
-  --side: 320px;
+  --side: 380px;
   --radius: 10px;
 
   --bg: #f4f5f8; --panel: #ffffff; --panel2: #eef0f5; --text: #1a2233; --muted: #6a7488;
@@ -91,7 +91,8 @@ body[data-env^="prod"] .sidebar { top: calc(var(--hdr) + 22px); height: calc(100
 .field input, .field select, .field textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
 .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .field textarea.id-list { resize: vertical; min-height: 72px; line-height: 1.35; }
-.field.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.field.id-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.field.two { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .inline { display: flex; align-items: center; gap: 8px; margin-top: 5px; flex-wrap: wrap; }
 .field input.narrow { width: 84px; }
 .presets { display: flex; gap: 4px; }
@@ -306,5 +307,8 @@ dialog::backdrop { background: rgba(0,0,0,.45); }
   .main { padding: 12px; }
   .tabs { padding: 0 6px; }
   .tabpanel { padding: 10px 8px 16px; }
+}
+@media (max-width: 700px) {
+  .field.id-fields { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
