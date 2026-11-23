@@ -9,7 +9,7 @@
         // apply saved theme before first paint (no flash)
         try { var t = localStorage.getItem('bi.theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
     </script>
-    <link rel="stylesheet" th:href="@{/css/app.css(v='sidebar-500-debug')}">
+    <link rel="stylesheet" th:href="@{/css/app.css(v='sidebar-400')}">
 </head>
 <body th:attr="data-env=${current != null ? #strings.toLowerCase(current.environment()) : ''},data-db=${f.db()},data-searched=${searched},data-server-now=${@fmt.nowEpoch()},data-zone=${@fmt.zoneId()},data-selected=${f.selected()}">
 
