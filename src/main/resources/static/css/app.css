@@ -6,7 +6,7 @@
   --font-ui: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", "SF Mono", ui-monospace, Menlo, Consolas, "Liberation Mono", monospace;
   --hdr: 52px;
-  --side: 380px;
+  --side: 430px;
   --radius: 10px;
 
   --bg: #f4f5f8; --panel: #ffffff; --panel2: #eef0f5; --text: #1a2233; --muted: #6a7488;
