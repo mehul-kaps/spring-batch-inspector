@@ -17,7 +17,7 @@ stack-trace viewer), and understand *when* every step actually ran on an interac
 
 | Area | What you get |
 |---|---|
-| Filters | Database dropdown, time-range chips (15 min … 30 days, all, custom), exact Execution ID / Instance ID, case-insensitive *Job name contains*, Maximum results (database-side limit), Reset |
+| Filters | Database dropdown, time-range chips (15 min … 30 days, all, custom), comma- or newline-separated Execution IDs / Instance IDs, case-insensitive *Job name contains*, Maximum results (database-side limit), Reset |
 | Status strip | All / Completed / Failed / Started / Starting / Stopping / Stopped / Abandoned / Unknown with **real counts of every match (before the display limit)** and a share bar |
 | Results | Colour-coded cards: job name from the execution's `JobName` parameter, per-job colour avatar, status badge + glyph, ids, start → end, live elapsed time for running jobs, exit code, exit message preview, step / failed-step chips, relative duration bar |
 | Detail | Overview (KPIs, **failure spotlight** with stack-trace viewer, timeline, summary), Steps table (all counters, throughput, slowest flag, expandable exit messages), Parameters (masked if sensitive), optional Context (text only, masked, size-limited) |
