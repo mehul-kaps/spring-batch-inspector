@@ -76,15 +76,17 @@
 
             <div class="field two">
                 <div>
-                    <label for="executionId">Execution ID</label>
-                    <input id="executionId" name="executionId" class="mono" inputmode="numeric" autocomplete="off" placeholder="exact" th:value="${f.executionId()}">
+                    <label for="executionId">Execution IDs</label>
+                    <textarea id="executionId" name="executionId" class="mono id-list" rows="3" autocomplete="off"
+                              placeholder="123&#10;456&#10;or 123,456" th:text="${f.executionId()}"></textarea>
                 </div>
                 <div>
-                    <label for="instanceId">Instance ID</label>
-                    <input id="instanceId" name="instanceId" class="mono" inputmode="numeric" autocomplete="off" placeholder="exact" th:value="${f.instanceId()}">
+                    <label for="instanceId">Instance IDs</label>
+                    <textarea id="instanceId" name="instanceId" class="mono id-list" rows="3" autocomplete="off"
+                              placeholder="123&#10;456&#10;or 123,456" th:text="${f.instanceId()}"></textarea>
                 </div>
             </div>
-            <p class="hint tight">An Execution ID search ignores the time range.</p>
+            <p class="hint tight">Enter IDs separated by commas or lines. An Execution ID search ignores the time range.</p>
 
             <div class="field">
                 <label for="jobName">Job name contains</label>

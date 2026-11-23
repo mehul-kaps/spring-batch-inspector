@@ -2,7 +2,9 @@ package com.ithaka.batchinspector.service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.stereotype.Component;
 
@@ -19,6 +21,7 @@ import com.ithaka.batchinspector.model.TimeRange;
 public class SearchCriteriaFactory {
 
     private static final int MAX_JOB_NAME_CHARS = 100;
+    private static final int MAX_ID_FILTER_ITEMS = 500;
 
     private final DashboardProperties props;
 
@@ -47,10 +50,10 @@ public class SearchCriteriaFactory {
             if (from == null && to == null) notes.add("Custom range left empty - searching all time.");
         }
 
-        Long executionId = parsePositiveLong(f.executionId(), "Execution ID");
-        Long instanceId = parsePositiveLong(f.instanceId(), "Job Instance ID");
-        if (executionId != null && range != TimeRange.ALL) {
-            notes.add("Execution ID is set, so the time range is ignored for this search.");
+        List<Long> executionIds = parsePositiveLongIds(f.executionId(), "Execution ID");
+        List<Long> instanceIds = parsePositiveLongIds(f.instanceId(), "Job Instance ID");
+        if (!executionIds.isEmpty() && range != TimeRange.ALL) {
+            notes.add("Execution ID filter is set, so the time range is ignored for this search.");
         }
 
         String name = f.jobName() == null ? "" : f.jobName().trim();
@@ -82,18 +85,29 @@ public class SearchCriteriaFactory {
             status = BatchStatus.of(st);
         }
 
-        return new Parsed(new SearchCriteria(f.db(), from, to, executionId, instanceId, name.isEmpty() ? null : name, limit, status), notes);
+        return new Parsed(new SearchCriteria(f.db(), from, to, executionIds, instanceIds, name.isEmpty() ? null : name, limit, status), notes);
     }
 
-    private static Long parsePositiveLong(String s, String label) {
-        if (s == null || s.isBlank()) return null;
-        try {
-            long v = Long.parseLong(s.trim());
-            if (v <= 0) throw new NumberFormatException();
-            return v;
-        } catch (NumberFormatException e) {
-            throw new DashboardException(Kind.BAD_REQUEST, label + " must be a positive whole number.");
+    private List<Long> parsePositiveLongIds(String s, String label) {
+        if (s == null || s.isBlank()) return List.of();
+        Set<Long> ids = new LinkedHashSet<>();
+        String[] parts = s.split("[,\\n\\r]+");
+        for (String part : parts) {
+            String value = part.trim();
+            if (value.isEmpty()) continue;
+            try {
+                long id = Long.parseLong(value);
+                if (id <= 0) throw new NumberFormatException();
+                ids.add(id);
+                if (ids.size() > MAX_ID_FILTER_ITEMS) {
+                    throw new DashboardException(Kind.BAD_REQUEST,
+                            label + " accepts at most " + MAX_ID_FILTER_ITEMS + " IDs.");
+                }
+            } catch (NumberFormatException e) {
+                throw new DashboardException(Kind.BAD_REQUEST, label + " values must be positive whole numbers.");
+            }
         }
+        return List.copyOf(ids);
     }
 
     private static LocalDateTime parseDateTime(String s, String label) {

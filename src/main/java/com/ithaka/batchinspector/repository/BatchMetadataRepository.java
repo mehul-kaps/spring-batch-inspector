@@ -182,9 +182,9 @@ public class BatchMetadataRepository {
     private Where filterWhere(Tables t, SearchCriteria c) {
         StringBuilder sb = new StringBuilder(" WHERE 1 = 1");
         MapSqlParameterSource p = new MapSqlParameterSource();
-        if (c.executionId() != null) {
-            sb.append(" AND e.JOB_EXECUTION_ID = :execId");
-            p.addValue("execId", c.executionId());
+        if (!c.executionIds().isEmpty()) {
+            sb.append(" AND e.JOB_EXECUTION_ID IN (:execIds)");
+            p.addValue("execIds", c.executionIds());
         } else {
             // Time filter is on the execution start time (falls back to create time for executions still STARTING).
             if (c.from() != null) {
@@ -196,9 +196,9 @@ public class BatchMetadataRepository {
                 p.addValue("tTo", Timestamp.valueOf(c.to()));
             }
         }
-        if (c.instanceId() != null) {
-            sb.append(" AND e.JOB_INSTANCE_ID = :instId");
-            p.addValue("instId", c.instanceId());
+        if (!c.instanceIds().isEmpty()) {
+            sb.append(" AND e.JOB_INSTANCE_ID IN (:instIds)");
+            p.addValue("instIds", c.instanceIds());
         }
         if (c.jobNameContains() != null && !c.jobNameContains().isBlank()) {
             sb.append(" AND UPPER(").append(displayJobName(t)).append(") LIKE :jobName ESCAPE '!'");
